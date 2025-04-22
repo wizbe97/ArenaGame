@@ -1,42 +1,44 @@
-using UnityEngine;
 using Steamworks;
+using UnityEngine;
 
 public class SteamManager : MonoBehaviour
 {
-    public static bool Initialized { get; private set; }
+	private static bool _initialized;
+    public static bool Initialized => _initialized;
 
-    private void Awake()
-    {
-        if (Initialized)
-            return;
+	private void Awake()
+	{
+		if (_initialized)
+			return;
 
-        if (SteamAPI.RestartAppIfNecessary((AppId_t)480))
-        {
-            Application.Quit();
-            return;
-        }
+		// OPTIONAL: Commented out to prevent Steam relaunch issues in testing
+		// if (SteamAPI.RestartAppIfNecessary((AppId_t)480))
+		// {
+		//     Application.Quit();
+		//     return;
+		// }
 
-        if (!SteamAPI.Init())
-        {
-            Debug.LogError("SteamAPI.Init() failed. Is Steam running?");
-            Application.Quit();
-            return;
-        }
+		if (!SteamAPI.Init())
+		{
+			Debug.LogError("SteamAPI.Init() failed. Is Steam running?");
+			Application.Quit();
+			return;
+		}
 
-        Initialized = true;
-        DontDestroyOnLoad(gameObject);
-        Debug.Log("Steam initialized as: " + SteamFriends.GetPersonaName());
-    }
+		_initialized = true;
+		DontDestroyOnLoad(gameObject);
+		Debug.Log("✅ Steam initialized as: " + SteamFriends.GetPersonaName());
+	}
 
-    private void Update()
-    {
-        if (Initialized)
-            SteamAPI.RunCallbacks();
-    }
+	private void Update()
+	{
+		if (_initialized)
+			SteamAPI.RunCallbacks();
+	}
 
-    private void OnApplicationQuit()
-    {
-        if (Initialized)
-            SteamAPI.Shutdown();
-    }
+	private void OnApplicationQuit()
+	{
+		if (_initialized)
+			SteamAPI.Shutdown();
+	}
 }
