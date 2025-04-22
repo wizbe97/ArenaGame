@@ -81,7 +81,12 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
+        // ✅ Show the lobby
         lobbyPanel.SetActive(true);
+
+        // ✅ Register self as client after successful join
+        LobbyManager.Instance?.RegisterPlayer(_runner.LocalPlayer);
+
     }
 
 
