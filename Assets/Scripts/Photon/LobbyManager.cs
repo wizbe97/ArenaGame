@@ -15,33 +15,31 @@ public class LobbyManager : NetworkBehaviour
 
     public override void Spawned()
     {
-        Debug.Log("🚀 LobbyManager Spawned() called.");
+        Debug.Log("✅ LobbyManager Spawned");
 
         if (Instance == null)
             Instance = this;
 
-        // Don't do anything UI-related here yet
     }
 
-    public void InitializeLobby()
-    {
-        Debug.Log("✅ playerGrid now assigned in InitializeLobby");
-
-        if (Object.HasInputAuthority)
-        {
-            string steamName = SteamFriends.GetPersonaName();
-            Debug.Log($"📝 Submitting Steam name: {steamName}");
-            RPC_SubmitName(steamName);
-        }
-    }
 
     public void RegisterPlayer(PlayerRef player)
     {
-        Debug.Log($"➕ RegisterPlayer called with: {player}");
+        Debug.Log($"➕ RegisterPlayer called for: {player}");
 
         if (!playerNames.ContainsKey(player))
         {
-            playerNames.Add(player, "Loading...");
+            playerNames[player] = "Loading...";
+            Debug.Log("🟡 Added placeholder entry to name dictionary.");
+        }
+
+        // If this is the local player, submit Steam name to host
+        if (player == Runner.LocalPlayer)
+        {
+            string steamName = SteamFriends.GetPersonaName();
+            Debug.Log($"📝 Submitting local Steam name: {steamName}");
+
+            RPC_SubmitName(player, steamName);
         }
 
         RefreshLobbyUI();
@@ -49,44 +47,36 @@ public class LobbyManager : NetworkBehaviour
 
     public void UnregisterPlayer(PlayerRef player)
     {
-        Debug.Log($"➖ UnregisterPlayer called with: {player}");
+        Debug.Log($"❌ UnregisterPlayer called for: {player}");
 
         if (playerNames.ContainsKey(player))
         {
             playerNames.Remove(player);
+            Debug.Log("🗑️ Removed from name dictionary.");
         }
 
         RefreshLobbyUI();
     }
 
-    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-    public void RPC_SubmitName(string steamName, RpcInfo info = default)
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_SubmitName(PlayerRef fromPlayer, string steamName, RpcInfo info = default)
     {
-        var sender = info.Source;
-        Debug.Log($"✅ Received name from {sender}: {steamName}");
+        Debug.Log($"✅ Received name from {fromPlayer}: {steamName}");
 
-        playerNames[sender] = steamName;
+        playerNames[fromPlayer] = steamName;
         RefreshLobbyUI();
     }
 
-    private void RefreshLobbyUI()
+    public void RefreshLobbyUI()
     {
         Debug.Log("🔄 Refreshing Lobby UI...");
 
-        if (playerGrid == null)
-        {
-            Debug.LogError("❌ playerGrid is still null!");
-            return;
-        }
-
         foreach (Transform child in playerGrid)
-        {
             Destroy(child.gameObject);
-        }
 
         foreach (var kvp in playerNames)
         {
-            Debug.Log($"🎮 Spawning player slot: {kvp.Value}");
+            Debug.Log($"👤 Spawning player slot: {kvp.Value}");
             var slot = Instantiate(playerSlotPrefab, playerGrid);
             slot.GetComponentInChildren<TextMeshProUGUI>().text = kvp.Value;
         }

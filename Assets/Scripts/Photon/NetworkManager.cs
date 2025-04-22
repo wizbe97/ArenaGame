@@ -2,6 +2,7 @@ using UnityEngine;
 using Fusion;
 using Fusion.Sockets;
 using System.Collections.Generic;
+using Steamworks;
 
 public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 {
@@ -30,91 +31,75 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public async void StartHost()
     {
         if (_runner != null) return;
+        lobbyPanel.SetActive(true);
+
+        string steamID = SteamUser.GetSteamID().ToString();
+        Debug.Log($"🟢 Hosting with Session Name: {steamID}");
 
         GameObject runnerObj = Instantiate(networkRunnerPrefab);
         _runner = runnerObj.GetComponent<NetworkRunner>();
-        _runner.name = "NetworkRunner";
         _runner.ProvideInput = true;
         _runner.AddCallbacks(this);
 
         var result = await _runner.StartGame(new StartGameArgs
         {
             GameMode = GameMode.Host,
-            SessionName = "MyLobby",
+            SessionName = steamID,
             SceneManager = _runner.GetComponent<NetworkSceneManagerDefault>()
         });
 
         if (!result.Ok)
         {
-            Debug.LogError($"❌ Failed to start host: {result.ShutdownReason}");
+            Debug.LogError("❌ Failed to host: " + result.ShutdownReason);
             return;
         }
 
-        // ✅ Spawn and assign scene references
+        // Spawn lobby manager
         NetworkObject spawnedObj = _runner.Spawn(lobbyManagerPrefab, Vector3.zero, Quaternion.identity, _runner.LocalPlayer);
         LobbyManager spawnedLobby = spawnedObj.GetComponent<LobbyManager>();
-        spawnedLobby.playerGrid = playerGrid; // assign grid reference
-        spawnedLobby.InitializeLobby();       // now it’s safe to call RPC and UI
-
-
+        // ✅ After assigning playerGrid and calling RefreshLobbyUI()
+        spawnedLobby.playerGrid = playerGrid;
         Debug.Log("✅ LobbyManager spawned and playerGrid assigned");
 
-        lobbyPanel.SetActive(true);
+        spawnedLobby.RefreshLobbyUI();
+
+        // ✅ Safe place to register player after playerGrid is ready
+        Debug.Log($"📝 Registering local player from NetworkManager: {_runner.LocalPlayer}");
+        spawnedLobby.RegisterPlayer(_runner.LocalPlayer);
     }
 
-    public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
-    {
-        Debug.Log($"➕ OnPlayerJoined triggered! PlayerRef: {player}");
-
-        // Avoid registering self; name will be submitted via RPC from Spawned()
-        if (player != runner.LocalPlayer)
-        {
-            Debug.Log("➡️ Registering other player in lobby...");
-            LobbyManager.Instance?.RegisterPlayer(player);
-        }
-    }
-
-    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
-    {
-        Debug.Log($"❌ Player left: {player}");
-        LobbyManager.Instance?.UnregisterPlayer(player);
-    }
-
-
-    public async void JoinLobby(string sessionName)
+    public async void JoinLobby(string steamID)
     {
         if (_runner != null) return;
+
+        Debug.Log($"🔵 Joining Lobby with Session: {steamID}");
 
         GameObject runnerObj = Instantiate(networkRunnerPrefab);
         _runner = runnerObj.GetComponent<NetworkRunner>();
         _runner.ProvideInput = true;
-        _runner.name = "NetworkRunner_Join";
         _runner.AddCallbacks(this);
 
         var result = await _runner.StartGame(new StartGameArgs
         {
             GameMode = GameMode.Client,
-            SessionName = sessionName,
+            SessionName = steamID,
             SceneManager = _runner.GetComponent<NetworkSceneManagerDefault>()
         });
 
-        if (result.Ok)
-        {
-            lobbyPanel.SetActive(true);
-            Debug.Log("✅ Joined lobby successfully!");
-        }
-        else
+        if (!result.Ok)
         {
             Debug.LogError("❌ Failed to join lobby: " + result.ShutdownReason);
         }
     }
 
-    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
-    {
-        request.Accept();
-    }
+    public void OnPlayerJoined(NetworkRunner runner, PlayerRef player) =>
+        LobbyManager.Instance?.RegisterPlayer(player);
 
-    // Other unused INetworkRunnerCallbacks
+    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player) =>
+        LobbyManager.Instance?.UnregisterPlayer(player);
+
+    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) => request.Accept();
+
     public void OnConnectedToServer(NetworkRunner runner) { }
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
     public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
