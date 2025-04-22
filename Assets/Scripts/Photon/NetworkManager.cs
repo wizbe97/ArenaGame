@@ -22,7 +22,10 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             Instance = this;
             DontDestroyOnLoad(gameObject);
         }
-        else Destroy(gameObject);
+        else
+        {
+            Destroy(gameObject);
+        }
     }
 
     public async void StartHost()
@@ -53,7 +56,6 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         var obj = _runner.Spawn(lobbyManagerPrefab, Vector3.zero, Quaternion.identity, _runner.LocalPlayer);
         LobbyManager lobby = obj.GetComponent<LobbyManager>();
         lobby.playerGrid = playerGrid;
-        LobbyManager.Instance = lobby;
         lobbyPanel.SetActive(true);
     }
 
@@ -81,17 +83,9 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        // ✅ Show the lobby
         lobbyPanel.SetActive(true);
-
-        // ✅ Register self as client after successful join
-        LobbyManager.Instance?.RegisterPlayer(_runner.LocalPlayer);
-
     }
 
-
-
-    // Required callbacks
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player) =>
         LobbyManager.Instance?.RegisterPlayer(player);
 
