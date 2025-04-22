@@ -8,10 +8,10 @@ public class LobbyManager : NetworkBehaviour
 {
     public static LobbyManager Instance;
 
-    [Networked] private NetworkDictionary<int, NetworkString<_32>> playerNames => default;
-
-    [HideInInspector] public Transform playerGrid;
+    public Transform playerGrid;
     public GameObject playerSlotPrefab;
+
+    [Networked] private NetworkDictionary<int, string> playerNames => default;
 
     public override void Spawned()
     {
@@ -20,8 +20,7 @@ public class LobbyManager : NetworkBehaviour
 
         Debug.Log("✅ LobbyManager Spawned");
 
-        // Assign grid at runtime from NetworkManager (if available)
-        if (NetworkManager.Instance != null)
+        if (playerGrid == null && NetworkManager.Instance != null)
         {
             playerGrid = NetworkManager.Instance.playerGrid;
             Debug.Log("✅ playerGrid dynamically assigned by NetworkManager.");
@@ -32,10 +31,14 @@ public class LobbyManager : NetworkBehaviour
             Debug.Log("📝 Registering host player");
             RegisterPlayer(Runner.LocalPlayer);
         }
+
+        RefreshLobbyUI();
     }
 
     public void RegisterPlayer(PlayerRef player)
     {
+        if (!HasStateAuthority) return;
+
         int key = player.RawEncoded;
 
         if (!playerNames.ContainsKey(key))
@@ -56,8 +59,9 @@ public class LobbyManager : NetworkBehaviour
 
     public void UnregisterPlayer(PlayerRef player)
     {
-        int key = player.RawEncoded;
+        if (!HasStateAuthority) return;
 
+        int key = player.RawEncoded;
         if (playerNames.ContainsKey(key))
         {
             playerNames.Remove(key);
@@ -70,13 +74,18 @@ public class LobbyManager : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_SubmitName(int playerId, string steamName, RpcInfo info = default)
     {
-        Debug.Log($"✅ Received name for player ID {playerId}: {steamName}");
-
-        if (playerNames.ContainsKey(playerId))
-            playerNames.Set(playerId, steamName); // Proper setter to avoid CS1612
-        else
+        if (!playerNames.ContainsKey(playerId))
             playerNames.Add(playerId, steamName);
+        else
+            playerNames.Set(playerId, steamName);
 
+        Debug.Log($"✅ Received name for player ID {playerId}: {steamName}");
+        RPC_RefreshLobbyUI(); // Push updated UI to all clients
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_RefreshLobbyUI()
+    {
         RefreshLobbyUI();
     }
 
@@ -84,7 +93,7 @@ public class LobbyManager : NetworkBehaviour
     {
         if (playerGrid == null)
         {
-            Debug.LogError("❌ playerGrid is not assigned.");
+            Debug.LogWarning("⚠️ playerGrid is null, cannot update UI");
             return;
         }
 
@@ -96,7 +105,7 @@ public class LobbyManager : NetworkBehaviour
         foreach (var kvp in playerNames)
         {
             var slot = Instantiate(playerSlotPrefab, playerGrid);
-            slot.GetComponentInChildren<TextMeshProUGUI>().text = kvp.Value.ToString();
+            slot.GetComponentInChildren<TextMeshProUGUI>().text = kvp.Value;
         }
 
         int emptySlots = 8 - playerNames.Count;
