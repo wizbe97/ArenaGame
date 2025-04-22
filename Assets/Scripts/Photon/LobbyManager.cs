@@ -11,25 +11,29 @@ public class LobbyManager : NetworkBehaviour
     public Transform playerGrid;
     public GameObject playerSlotPrefab;
 
-    [Networked] private NetworkDictionary<int, string> playerNames => default;
+    private NetworkDictionary<int, string> playerNames = new();
 
     public override void Spawned()
     {
-        if (Instance == null)
-            Instance = this;
+        Instance = this;
 
         Debug.Log("✅ LobbyManager Spawned");
 
-        if (playerGrid == null && NetworkManager.Instance != null)
+        if (playerGrid == null)
         {
-            playerGrid = NetworkManager.Instance.playerGrid;
-            Debug.Log("✅ playerGrid dynamically assigned by NetworkManager.");
+            Debug.Log("⚠️ Waiting for NetworkManager to assign playerGrid...");
         }
 
+        // Check if this is our local player and we're the server
         if (Runner.IsServer)
         {
             Debug.Log("📝 Registering host player");
             RegisterPlayer(Runner.LocalPlayer);
+        }
+
+        if (playerGrid != null)
+        {
+            Debug.Log("✅ playerGrid dynamically assigned by NetworkManager.");
         }
 
         RefreshLobbyUI();
@@ -37,20 +41,18 @@ public class LobbyManager : NetworkBehaviour
 
     public void RegisterPlayer(PlayerRef player)
     {
-        if (!HasStateAuthority) return;
-
         int key = player.RawEncoded;
 
         if (!playerNames.ContainsKey(key))
         {
             playerNames.Add(key, "Loading...");
-            Debug.Log($"➕ Added placeholder for Player {player}");
+            Debug.Log($"➕ Placeholder added for player {key}");
         }
 
         if (player == Runner.LocalPlayer && Object.HasInputAuthority)
         {
             string steamName = SteamFriends.GetPersonaName();
-            Debug.Log($"📤 Submitting name for {player}: {steamName}");
+            Debug.Log($"📤 Submitting name for {steamName} ({key})");
             RPC_SubmitName(key, steamName);
         }
 
@@ -59,13 +61,12 @@ public class LobbyManager : NetworkBehaviour
 
     public void UnregisterPlayer(PlayerRef player)
     {
-        if (!HasStateAuthority) return;
-
         int key = player.RawEncoded;
+
         if (playerNames.ContainsKey(key))
         {
             playerNames.Remove(key);
-            Debug.Log($"🗑️ Removed player {player}");
+            Debug.Log($"🗑️ Removed player {key}");
         }
 
         RefreshLobbyUI();
@@ -74,18 +75,13 @@ public class LobbyManager : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_SubmitName(int playerId, string steamName, RpcInfo info = default)
     {
-        if (!playerNames.ContainsKey(playerId))
-            playerNames.Add(playerId, steamName);
+        Debug.Log($"✅ Received name: {steamName} for ID {playerId}");
+
+        if (playerNames.ContainsKey(playerId))
+            playerNames[playerId] = steamName;
         else
-            playerNames.Set(playerId, steamName);
+            playerNames.Add(playerId, steamName);
 
-        Debug.Log($"✅ Received name for player ID {playerId}: {steamName}");
-        RPC_RefreshLobbyUI(); // Push updated UI to all clients
-    }
-
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_RefreshLobbyUI()
-    {
         RefreshLobbyUI();
     }
 
@@ -93,7 +89,7 @@ public class LobbyManager : NetworkBehaviour
     {
         if (playerGrid == null)
         {
-            Debug.LogWarning("⚠️ playerGrid is null, cannot update UI");
+            Debug.LogWarning("⚠️ playerGrid not assigned. Skipping UI refresh.");
             return;
         }
 
@@ -102,10 +98,18 @@ public class LobbyManager : NetworkBehaviour
         foreach (Transform child in playerGrid)
             Destroy(child.gameObject);
 
-        foreach (var kvp in playerNames)
+        try
         {
-            var slot = Instantiate(playerSlotPrefab, playerGrid);
-            slot.GetComponentInChildren<TextMeshProUGUI>().text = kvp.Value;
+            foreach (var kvp in playerNames)
+            {
+                var slot = Instantiate(playerSlotPrefab, playerGrid);
+                slot.GetComponentInChildren<TextMeshProUGUI>().text = kvp.Value;
+            }
+        }
+        catch (System.InvalidOperationException)
+        {
+            Debug.LogWarning("⚠️ Skipped UI refresh: NetworkDictionary not ready.");
+            return;
         }
 
         int emptySlots = 8 - playerNames.Count;
@@ -114,5 +118,11 @@ public class LobbyManager : NetworkBehaviour
             var slot = Instantiate(playerSlotPrefab, playerGrid);
             slot.GetComponentInChildren<TextMeshProUGUI>().text = "Empty Slot";
         }
+    }
+
+    public void AssignPlayerGrid(Transform grid)
+    {
+        playerGrid = grid;
+        Debug.Log("✅ playerGrid assigned via AssignPlayerGrid.");
     }
 }

@@ -50,11 +50,23 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
+        // Inside StartHost (after spawn)
         var obj = _runner.Spawn(lobbyManagerPrefab, Vector3.zero, Quaternion.identity, _runner.LocalPlayer);
         LobbyManager lobby = obj.GetComponent<LobbyManager>();
-        lobby.playerGrid = playerGrid;
-
+        lobby.AssignPlayerGrid(playerGrid); // 🔧 Assign dynamically
         lobbyPanel.SetActive(true);
+
+        // Inside JoinLobby (in client, after lobbyPanel.SetActive)
+        StartCoroutine(WaitAndAssignGrid());
+
+
+    }
+    private System.Collections.IEnumerator WaitAndAssignGrid()
+    {
+        while (LobbyManager.Instance == null)
+            yield return null;
+
+        LobbyManager.Instance.AssignPlayerGrid(playerGrid);
     }
 
     public async void JoinLobby(string steamID)
