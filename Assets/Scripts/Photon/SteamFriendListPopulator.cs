@@ -15,26 +15,28 @@ public class SteamFriendListPopulator : MonoBehaviour
         }
 
         int friendCount = SteamFriends.GetFriendCount(EFriendFlags.k_EFriendFlagImmediate);
-        Debug.Log($"🧑‍🤝‍🧑 Found {friendCount} friends.");
 
         for (int i = 0; i < friendCount; i++)
         {
             CSteamID friendID = SteamFriends.GetFriendByIndex(i, EFriendFlags.k_EFriendFlagImmediate);
-            string friendName = SteamFriends.GetFriendPersonaName(friendID);
 
-            Debug.Log($"📝 Friend {i}: {friendName} ({friendID})");
+            if (SteamFriends.GetFriendPersonaState(friendID) == EPersonaState.k_EPersonaStateOffline)
+                continue;
 
-            GameObject item = Instantiate(friendListItemPrefab, friendListContainer);
-            FriendListItem listItem = item.GetComponent<FriendListItem>();
-
-            if (listItem != null)
+            if (SteamFriends.GetFriendGamePlayed(friendID, out FriendGameInfo_t gameInfo))
             {
-                listItem.Setup(friendName, friendID);
+                if (gameInfo.m_gameID.AppID() != new AppId_t(480))
+                    continue; // Wrong game
             }
             else
             {
-                Debug.LogWarning("⚠️ FriendListItem script not found on prefab!");
+                continue; // Not in a game
             }
+
+            string friendName = SteamFriends.GetFriendPersonaName(friendID);
+            GameObject item = Instantiate(friendListItemPrefab, friendListContainer);
+            FriendListItem listItem = item.GetComponent<FriendListItem>();
+            listItem.Setup(friendName, friendID);
         }
     }
 }

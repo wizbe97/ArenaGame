@@ -19,9 +19,7 @@ public class LobbyManager : NetworkBehaviour
 
         if (Instance == null)
             Instance = this;
-
     }
-
 
     public void RegisterPlayer(PlayerRef player)
     {
@@ -30,11 +28,9 @@ public class LobbyManager : NetworkBehaviour
         if (!playerNames.ContainsKey(player))
         {
             playerNames[player] = "Loading...";
-            Debug.Log("🟡 Added placeholder entry to name dictionary.");
         }
 
-        // If this is the local player, submit Steam name to host
-        if (player == Runner.LocalPlayer)
+        if (player == Runner.LocalPlayer && Object.HasInputAuthority)
         {
             string steamName = SteamFriends.GetPersonaName();
             Debug.Log($"📝 Submitting local Steam name: {steamName}");
@@ -47,12 +43,9 @@ public class LobbyManager : NetworkBehaviour
 
     public void UnregisterPlayer(PlayerRef player)
     {
-        Debug.Log($"❌ UnregisterPlayer called for: {player}");
-
-        if (playerNames.ContainsKey(player))
+        if (playerNames.Remove(player))
         {
-            playerNames.Remove(player);
-            Debug.Log("🗑️ Removed from name dictionary.");
+            Debug.Log($"❌ Player removed: {player}");
         }
 
         RefreshLobbyUI();
@@ -62,27 +55,23 @@ public class LobbyManager : NetworkBehaviour
     public void RPC_SubmitName(PlayerRef fromPlayer, string steamName, RpcInfo info = default)
     {
         Debug.Log($"✅ Received name from {fromPlayer}: {steamName}");
-
         playerNames[fromPlayer] = steamName;
         RefreshLobbyUI();
     }
 
     public void RefreshLobbyUI()
     {
-        Debug.Log("🔄 Refreshing Lobby UI...");
-
         foreach (Transform child in playerGrid)
             Destroy(child.gameObject);
 
-        foreach (var kvp in playerNames)
+        foreach (var entry in playerNames)
         {
-            Debug.Log($"👤 Spawning player slot: {kvp.Value}");
             var slot = Instantiate(playerSlotPrefab, playerGrid);
-            slot.GetComponentInChildren<TextMeshProUGUI>().text = kvp.Value;
+            slot.GetComponentInChildren<TextMeshProUGUI>().text = entry.Value;
         }
 
-        int emptySlots = 8 - playerNames.Count;
-        for (int i = 0; i < emptySlots; i++)
+        int empty = 8 - playerNames.Count;
+        for (int i = 0; i < empty; i++)
         {
             var slot = Instantiate(playerSlotPrefab, playerGrid);
             slot.GetComponentInChildren<TextMeshProUGUI>().text = "Empty Slot";

@@ -4,18 +4,18 @@ using UnityEngine;
 public class SteamManager : MonoBehaviour
 {
 	private static bool _initialized;
-    public static bool Initialized => _initialized;
+	public static bool Initialized => _initialized;
 
 	private void Awake()
 	{
 		if (_initialized)
 			return;
 
-		// OPTIONAL: Commented out to prevent Steam relaunch issues in testing
+		// Optional: disable this during local testing
 		// if (SteamAPI.RestartAppIfNecessary((AppId_t)480))
 		// {
-		//     Application.Quit();
-		//     return;
+		// 	Application.Quit();
+		// 	return;
 		// }
 
 		if (!SteamAPI.Init())
@@ -27,7 +27,7 @@ public class SteamManager : MonoBehaviour
 
 		_initialized = true;
 		DontDestroyOnLoad(gameObject);
-		Debug.Log("✅ Steam initialized as: " + SteamFriends.GetPersonaName());
+		Debug.Log("Steam initialized as: " + SteamFriends.GetPersonaName());
 	}
 
 	private void Update()
