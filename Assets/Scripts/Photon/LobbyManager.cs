@@ -11,8 +11,9 @@ public class LobbyManager : NetworkBehaviour
     public Transform playerGrid;
     public GameObject playerSlotPrefab;
 
-    [Networked]
+    [Networked, Capacity(8)]
     private NetworkDictionary<int, NetworkString<_32>> playerNames => default;
+
 
     private Dictionary<int, string> queuedNames = new(); // For clients to retry name submission
 
@@ -49,11 +50,12 @@ public class LobbyManager : NetworkBehaviour
         {
             string steamName = SteamFriends.GetPersonaName();
             Debug.Log($"📤 Submitting name for {player}: {steamName}");
-            TrySubmitName(id, steamName);
+            RPC_SubmitName(id, steamName);
         }
 
         RefreshLobbyUI();
     }
+
 
     private void TrySubmitName(int id, string name)
     {
