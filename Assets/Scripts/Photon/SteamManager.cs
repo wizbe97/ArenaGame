@@ -1,44 +1,68 @@
-using Steamworks;
 using UnityEngine;
+using Steamworks;
 
 public class SteamManager : MonoBehaviour
 {
-	private static bool _initialized;
-	public static bool Initialized => _initialized;
+    public static SteamManager Instance { get; private set; }
 
-	private void Awake()
-	{
-		if (_initialized)
-			return;
+    public static bool Initialized { get; private set; }
 
-		// Optional: disable this during local testing
-		// if (SteamAPI.RestartAppIfNecessary((AppId_t)480))
-		// {
-		// 	Application.Quit();
-		// 	return;
-		// }
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
 
-		if (!SteamAPI.Init())
-		{
-			Debug.LogError("SteamAPI.Init() failed. Is Steam running?");
-			Application.Quit();
-			return;
-		}
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
 
-		_initialized = true;
-		DontDestroyOnLoad(gameObject);
-		Debug.Log("Steam initialized as: " + SteamFriends.GetPersonaName());
-	}
+#if !DISABLESTEAMWORKS
+        if (!Packsize.Test())
+        {
+            Debug.LogError("[Steamworks.NET] Packsize Test failed.");
+        }
 
-	private void Update()
-	{
-		if (_initialized)
-			SteamAPI.RunCallbacks();
-	}
+        if (!DllCheck.Test())
+        {
+            Debug.LogError("[Steamworks.NET] DllCheck Test failed.");
+        }
 
-	private void OnApplicationQuit()
-	{
-		if (_initialized)
-			SteamAPI.Shutdown();
-	}
+        try
+        {
+            if (!SteamAPI.Init())
+            {
+                Debug.LogError("SteamAPI_Init() failed.");
+                Initialized = false;
+                return;
+            }
+        }
+        catch (System.DllNotFoundException e)
+        {
+            Debug.LogError($"[Steamworks.NET] Could not load Steam DLL: {e}");
+            Initialized = false;
+            return;
+        }
+#endif
+
+        Initialized = true;
+        Debug.Log($"Steam initialized as: {SteamFriends.GetPersonaName()}");
+    }
+
+    private void OnApplicationQuit()
+    {
+        if (Initialized)
+        {
+            SteamAPI.Shutdown();
+        }
+    }
+
+    private void Update()
+    {
+        if (Initialized)
+        {
+            SteamAPI.RunCallbacks();
+        }
+    }
 }

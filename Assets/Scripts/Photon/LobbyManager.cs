@@ -1,128 +1,93 @@
 using Fusion;
 using Steamworks;
-using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
-public class LobbyManager : NetworkBehaviour
-{
+public class LobbyManager : NetworkBehaviour {
     public static LobbyManager Instance;
 
     public Transform playerGrid;
     public GameObject playerSlotPrefab;
 
-    private NetworkDictionary<int, string> playerNames = new();
+    [Networked]
+    private NetworkDictionary<int, NetworkString<_32>> playerNames => default;
 
-    public override void Spawned()
-    {
+    public override void Spawned() {
         Instance = this;
+
+        if (playerGrid == null) {
+            Debug.LogWarning("⚠️ playerGrid not yet assigned.");
+            return;
+        }
 
         Debug.Log("✅ LobbyManager Spawned");
 
-        if (playerGrid == null)
-        {
-            Debug.Log("⚠️ Waiting for NetworkManager to assign playerGrid...");
-        }
-
-        // Check if this is our local player and we're the server
-        if (Runner.IsServer)
-        {
-            Debug.Log("📝 Registering host player");
+        if (HasStateAuthority) {
             RegisterPlayer(Runner.LocalPlayer);
         }
+    }
 
-        if (playerGrid != null)
-        {
-            Debug.Log("✅ playerGrid dynamically assigned by NetworkManager.");
+    public void RegisterPlayer(PlayerRef player) {
+        int id = player.RawEncoded;
+
+        if (HasStateAuthority && !playerNames.ContainsKey(id)) {
+            playerNames.Add(id, "Loading...");
+        }
+
+        if (player == Runner.LocalPlayer && Object.HasInputAuthority) {
+            string name = SteamFriends.GetPersonaName();
+            Debug.Log($"📤 Submitting name for {player}: {name}");
+            RPC_SubmitName(id, name);
         }
 
         RefreshLobbyUI();
     }
 
-    public void RegisterPlayer(PlayerRef player)
-    {
-        int key = player.RawEncoded;
+    public void UnregisterPlayer(PlayerRef player) {
+        int id = player.RawEncoded;
 
-        if (!playerNames.ContainsKey(key))
-        {
-            playerNames.Add(key, "Loading...");
-            Debug.Log($"➕ Placeholder added for player {key}");
-        }
-
-        if (player == Runner.LocalPlayer && Object.HasInputAuthority)
-        {
-            string steamName = SteamFriends.GetPersonaName();
-            Debug.Log($"📤 Submitting name for {steamName} ({key})");
-            RPC_SubmitName(key, steamName);
-        }
-
-        RefreshLobbyUI();
-    }
-
-    public void UnregisterPlayer(PlayerRef player)
-    {
-        int key = player.RawEncoded;
-
-        if (playerNames.ContainsKey(key))
-        {
-            playerNames.Remove(key);
-            Debug.Log($"🗑️ Removed player {key}");
+        if (HasStateAuthority && playerNames.ContainsKey(id)) {
+            playerNames.Remove(id);
+            Debug.Log($"🗑 Removed player {player}");
         }
 
         RefreshLobbyUI();
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void RPC_SubmitName(int playerId, string steamName, RpcInfo info = default)
-    {
-        Debug.Log($"✅ Received name: {steamName} for ID {playerId}");
+    public void RPC_SubmitName(int id, string name) {
+        if (!playerNames.ContainsKey(id)) {
+            playerNames.Add(id, name);
+        } else {
+            var updated = playerNames.Get(id);
+            updated = name;  // Just reassign the value
+            playerNames.Set(id, updated);  // Explicitly use Set
+        }
 
-        if (playerNames.ContainsKey(playerId))
-            playerNames[playerId] = steamName;
-        else
-            playerNames.Add(playerId, steamName);
-
+        Debug.Log($"✅ Updated name for player ID {id}: {name}");
         RefreshLobbyUI();
     }
 
-    private void RefreshLobbyUI()
-    {
-        if (playerGrid == null)
-        {
+    public void RefreshLobbyUI() {
+        if (playerGrid == null) {
             Debug.LogWarning("⚠️ playerGrid not assigned. Skipping UI refresh.");
             return;
         }
 
-        Debug.Log("🔄 Refreshing Lobby UI");
-
-        foreach (Transform child in playerGrid)
+        foreach (Transform child in playerGrid) {
             Destroy(child.gameObject);
-
-        try
-        {
-            foreach (var kvp in playerNames)
-            {
-                var slot = Instantiate(playerSlotPrefab, playerGrid);
-                slot.GetComponentInChildren<TextMeshProUGUI>().text = kvp.Value;
-            }
-        }
-        catch (System.InvalidOperationException)
-        {
-            Debug.LogWarning("⚠️ Skipped UI refresh: NetworkDictionary not ready.");
-            return;
         }
 
-        int emptySlots = 8 - playerNames.Count;
-        for (int i = 0; i < emptySlots; i++)
-        {
+        foreach (var kvp in playerNames) {
+            var slot = Instantiate(playerSlotPrefab, playerGrid);
+            slot.GetComponentInChildren<TextMeshProUGUI>().text = kvp.Value.ToString();
+        }
+
+        for (int i = playerNames.Count; i < 8; i++) {
             var slot = Instantiate(playerSlotPrefab, playerGrid);
             slot.GetComponentInChildren<TextMeshProUGUI>().text = "Empty Slot";
         }
-    }
 
-    public void AssignPlayerGrid(Transform grid)
-    {
-        playerGrid = grid;
-        Debug.Log("✅ playerGrid assigned via AssignPlayerGrid.");
+        Debug.Log("🔄 Lobby UI refreshed");
     }
 }

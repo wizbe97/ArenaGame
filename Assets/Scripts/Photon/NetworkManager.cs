@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Fusion;
 using Fusion.Sockets;
 using Steamworks;
-using System.Collections.Generic;
+using System;
+using System.Collections;
 
 public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 {
@@ -21,8 +23,25 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            StartCoroutine(WaitForSteamAndStartHost());
         }
-        else Destroy(gameObject);
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+
+    private IEnumerator WaitForSteamAndStartHost()
+    {
+        // 🕒 Wait until Steam is ready
+        while (!SteamManager.Initialized)
+        {
+            Debug.Log("⏳ Waiting for Steam to initialize...");
+            yield return null;
+        }
+
+        Debug.Log("✅ Steam ready. Starting host.");
+        StartHost();
     }
 
     public async void StartHost()
@@ -30,7 +49,7 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (_runner != null) return;
 
         string steamID = SteamUser.GetSteamID().ToString();
-        Debug.Log($"🟢 Hosting with Session Name: {steamID}");
+        Debug.Log($"🟢 Hosting with Session Name: lobby_{steamID}");
 
         GameObject runnerObj = Instantiate(networkRunnerPrefab);
         _runner = runnerObj.GetComponent<NetworkRunner>();
@@ -40,7 +59,7 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         var result = await _runner.StartGame(new StartGameArgs
         {
             GameMode = GameMode.Host,
-            SessionName = steamID,
+            SessionName = $"lobby_{steamID}",
             SceneManager = _runner.GetComponent<NetworkSceneManagerDefault>()
         });
 
@@ -50,51 +69,43 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        // Inside StartHost (after spawn)
         var obj = _runner.Spawn(lobbyManagerPrefab, Vector3.zero, Quaternion.identity, _runner.LocalPlayer);
         LobbyManager lobby = obj.GetComponent<LobbyManager>();
-        lobby.AssignPlayerGrid(playerGrid); // 🔧 Assign dynamically
-        lobbyPanel.SetActive(true);
-
-        // Inside JoinLobby (in client, after lobbyPanel.SetActive)
-        StartCoroutine(WaitAndAssignGrid());
-
-
+        lobby.playerGrid = playerGrid;
     }
-    private System.Collections.IEnumerator WaitAndAssignGrid()
-    {
-        while (LobbyManager.Instance == null)
-            yield return null;
 
-        LobbyManager.Instance.AssignPlayerGrid(playerGrid);
+    public void OnClickPlay()
+    {
+        lobbyPanel.SetActive(true);
+        LobbyManager.Instance?.RefreshLobbyUI();
     }
 
     public async void JoinLobby(string steamID)
     {
-        if (_runner != null) return;
-
-        Debug.Log($"🔵 Joining Lobby with Session: {steamID}");
+        Debug.Log($"🔵 Joining lobby: lobby_{steamID}");
 
         GameObject runnerObj = Instantiate(networkRunnerPrefab);
         _runner = runnerObj.GetComponent<NetworkRunner>();
-        _runner.ProvideInput = true;
+        _runner.ProvideInput = false;
         _runner.AddCallbacks(this);
 
         var result = await _runner.StartGame(new StartGameArgs
         {
             GameMode = GameMode.Client,
-            SessionName = steamID,
+            SessionName = $"lobby_{steamID}",
             SceneManager = _runner.GetComponent<NetworkSceneManagerDefault>()
         });
 
         if (!result.Ok)
         {
-            Debug.LogError("❌ Failed to join lobby: " + result.ShutdownReason);
+            Debug.LogError($"❌ Failed to join: {result.ShutdownReason}");
             return;
         }
 
         lobbyPanel.SetActive(true);
     }
+
+    // --- Fusion Callbacks ---
 
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
@@ -102,25 +113,22 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         LobbyManager.Instance?.RegisterPlayer(player);
     }
 
-    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player) =>
-        LobbyManager.Instance?.UnregisterPlayer(player);
-
-    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) => request.Accept();
-
+    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player) => LobbyManager.Instance?.UnregisterPlayer(player);
     public void OnConnectedToServer(NetworkRunner runner) { }
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
-    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
+    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) => request.Accept();
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
     public void OnInput(NetworkRunner runner, NetworkInput input) { }
     public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
-    public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) { }
-    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
-    public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
+    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
+    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
+    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     public void OnSceneLoadDone(NetworkRunner runner) { }
     public void OnSceneLoadStart(NetworkRunner runner) { }
+    public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) { }
+    public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
     public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
-    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, System.ArraySegment<byte> data) { }
-    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
+    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
 }
